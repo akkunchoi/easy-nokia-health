@@ -44,7 +44,7 @@ class WithingsClient {
   }
 
   /**
-   * コンシューマーキーから認証URLを生成、ブラウザを開き、コールバックを受け取ったらアクセストークンを返す
+   * Create authorizaeUrl, open it in chrome and get an access token when received callback.
    * 
    * @return {Promise.<WithingsAccessToken>}
    */
@@ -85,7 +85,7 @@ class WithingsClient {
   }
 
   /**
-   * accessTokenを取得して書き込みする
+   * save an access token
    * 
    * @return {Promise.<void>}
    */
@@ -96,7 +96,7 @@ class WithingsClient {
   }
 
   /**
-   * accessTokenがなければ取得しにいく
+   * get an access token while save an access token if not exist.
    * 
    * @return {Promise.<WithingsAccessToken>}
    */
@@ -113,6 +113,7 @@ class WithingsClient {
   }
 
   /**
+   * 
    * @return {Promise.<{token: string, secret: string, authorizeUrl: string}>}
    */
   getRequestToken() {

@@ -1,6 +1,6 @@
 {
-  "name": "withings-api-test",
-  "version": "1.0.0",
+  "name": "easy-withings-api",
+  "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
