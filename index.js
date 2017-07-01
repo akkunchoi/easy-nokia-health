@@ -3,89 +3,132 @@
 const env = require('node-env-file');
 const config = env(__dirname + '/.env');
 
-var express = require('express')
-var app = express()
-var Withings = require('withings-lib');
-var cookieParser = require('cookie-parser');
-var session = require('express-session');
+//----------------------------------------
+const Promise = require('bluebird');
+const _ = require('lodash');
+const mkdirp = Promise.promisify(require('mkdirp'));
+const writeFile = Promise.promisify(require('fs').writeFile);
+const Withings = require('withings-lib');
+const express = require('express');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const exec = require('child_process').exec;
 
-app.use(cookieParser());
-app.use(session({secret: 'bigSecret'}));
-app.listen(config.SERVER_PORT);
+class WithingsClient {
+  
+  constructor(config) {
+    this.config = _.assign({}, config, {
+      CREDENTIAL_PATH: './tmp/credential.json'
+    });
+  }
+  
+  async prepare() {
+    
+    const accessToken = await this.saveAccessTokenIfNotExist();
 
-// OAuth flow
-app.use((req, res, next) => {
-  console.log('express', req.url);
-  next();
-});
-app.get('/', function (req, res) {
-    // Create an API client and start authentication via OAuth
-    var options = {
-        consumerKey: config.CONSUMER_KEY,
-        consumerSecret: config.CONSUMER_SECRET,
-        callbackUrl: config.CALLBACK_URL
-    };
-    var client = new Withings(options);
+    return new Promise((resolve, reject) => {
+      
+      var options = {
+        consumerKey: this.config.CONSUMER_KEY,
+        consumerSecret: this.config.CONSUMER_SECRET,
+        accessToken: accessToken.token,
+        accessTokenSecret: accessToken.secret,
+        userID: accessToken.userid
+      };
+      var client = new Withings(options);
 
-    client.getRequestToken(function (err, token, tokenSecret) {
-        if (err) {
-            // Throw error
-            return;
-        }
-
-        req.session.oauth = {
-            requestToken: token,
-            requestTokenSecret: tokenSecret
-        };
+      client.getDailySteps(new Date(), function(err, data) {
+        console.log(err, data);
+      });
+      
+    })
+    
+  }
+  
+  saveAccessTokenIfNotExist() {
+    
+    return Promise.resolve()
+      
+      .then(() => {
+        return require(this.config.CREDENTIAL_PATH)
+      })
+    
+      .catch(() => {
+      
+        return Promise.resolve()
+          
+          .then(() => {
+            return mkdirp(path.dirname(this.config.CREDENTIAL_PATH));
+          })
         
-        res.redirect(client.authorizeUrl(token, tokenSecret));
-    });
-});
+          .then(() => {
+            return this.getRequestToken().then((token) => {
 
-// On return from the authorization
-app.get('/oauth_callback', function (req, res) {
-    var verifier = req.query.oauth_verifier
-    var oauthSettings = req.session.oauth
+              console.log('Go ' + token.authorizeUrl);
+              let cmd = 'open -a "Google Chrome" "' + token.authorizeUrl + '"';
+              exec(cmd);
+
+              var app = express();
+              app.use(cookieParser());
+              app.listen(this.config.SERVER_PORT);
+
+              return new Promise((resolve, reject) => {
+                app.get('/oauth_callback', (req, res) => {
+                  var verifier = req.query.oauth_verifier;
+                  var options = {
+                    consumerKey: this.config.CONSUMER_KEY,
+                    consumerSecret: this.config.CONSUMER_SECRET,
+                    callbackUrl: this.config.CALLBACK_URL,
+                    userID: req.query.userid
+                  };
+                  var client = new Withings(options);
+
+                  // Request an access token
+                  client.getAccessToken(token.token, token.secret, verifier, (err, token, secret) => {
+                    if (err) return reject(err);
+                    resolve({
+                      token: token,
+                      secret: secret,
+                      userid: req.query.userid
+                    })
+                  });
+
+                });
+              });
+
+            });
+          })
+          .then((accessToken) => {
+            return writeFile(this.config.CREDENTIAL_PATH, JSON.stringify(accessToken));
+          })
+      });
+  }
+  getRequestToken() {
     var options = {
-        consumerKey: config.CONSUMER_KEY,
-        consumerSecret: config.CONSUMER_SECRET,
-        callbackUrl: config.CALLBACK_URL,
-        userID: req.query.userid
+      consumerKey: this.config.CONSUMER_KEY,
+      consumerSecret: this.config.CONSUMER_SECRET,
+      callbackUrl: this.config.CALLBACK_URL
     };
     var client = new Withings(options);
 
-    // Request an access token
-    client.getAccessToken(oauthSettings.requestToken, oauthSettings.requestTokenSecret, verifier,
-        function (err, token, secret) {
-            if (err) {
-                // Throw error
-                return;
-            }
+    return new Promise((resolve, reject) => {
+      client.getRequestToken(function (err, token, tokenSecret) {
+        if (err) return reject(err);
+        resolve({
+          token: token,
+          secret: tokenSecret,
+          authorizeUrl: client.authorizeUrl(token, tokenSecret)
+        });
+      });
+    })
+  }
+  
+}
 
-            oauthSettings.accessToken = token;
-            oauthSettings.accessTokenSecret = secret;
-
-            res.redirect('/activity/steps?userid=' + req.query.userid);
-        }
-    );
-});
-
-// Display today's steps for a user
-app.get('/activity/steps', function (req, res) {
-    var options = {
-        consumerKey: config.CONSUMER_KEY,
-        consumerSecret: config.CONSUMER_SECRET,
-        accessToken: req.session.oauth.accessToken,
-        accessTokenSecret: req.session.oauth.accessTokenSecret,
-        userID: req.query.userid
-    };
-    var client = new Withings(options);
-
-    client.getDailySteps(new Date(), function(err, data) {
-        if (err) {
-            res.send(err);    
-        }
-        res.json(data);
-    });
-});
-
+const w = new WithingsClient(config);
+w.prepare().then((res) => {
+  console.log(res);
+})
+  .catch((err) => {
+    console.error(err, err.stack);
+  })
