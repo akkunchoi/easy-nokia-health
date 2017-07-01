@@ -15,6 +15,8 @@
     "express-session": "^1.15.3",
     "lodash": "^4.17.4",
     "mkdirp": "^0.5.1",
+    "moment": "^2.18.1",
+    "moment-timezone": "^0.5.13",
     "node-env-file": "^0.1.8",
     "withings-lib": "^0.2.2"
   }

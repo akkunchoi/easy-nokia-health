@@ -11,6 +11,8 @@ const writeFile = Promise.promisify(require('fs').writeFile);
 const Withings = require('withings-lib');
 const express = require('express');
 const path = require('path');
+const moment = require('moment');
+require('moment-timezone');
 const cookieParser = require('cookie-parser');
 const exec = require('child_process').exec;
 
@@ -160,13 +162,36 @@ class WithingsClient {
     }
     return this.withingsClient;
   }
-  getStep(date) {
-    return this.getWithingsClient().getDailySteps(date);
-  }
   
   async run() {
     await this.prepare();
-    console.log(await this.getStep(new Date()));
+    // console.log(await this.getWithingsClient().getDailySteps(now));
+    // console.log(await this.getWithingsClient().getWeightMeasures('2017-06-01', '2017-06-30'));
+    this.showSleepSummary();
+  }
+  
+  async showSleepSummary() {
+    const now = moment();
+    const sevenDaysAgo = moment().subtract(7, 'days');
+    const week = await this.getWithingsClient().getSleepSummary(sevenDaysAgo, now);
+    for (let day of week) {
+      // { id: 594229149,
+      //   timezone: 'Asia/Tokyo',
+      //   model: 16,
+      //   startdate: 1498234920,
+      //   enddate: 1498267380,
+      //   date: '2017-06-24',
+      //   data:
+      //   { wakeupduration: 960,
+      //     lightsleepduration: 20580,
+      //     deepsleepduration: 10920,
+      //     wakeupcount: 1,
+      //     durationtosleep: 360 },
+      //   modified: 1498519316 }      
+      console.log(day);
+      console.log(moment(day.startdate * 1000).tz(day.timezone).format());
+      console.log(moment(day.enddate * 1000).tz(day.timezone).format());
+    }
   }
 }
 
